@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<style>
+.slidecontainer {
+  width: 100%;
+}
+
+.slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 15px;
+  border-radius: 5px;
+  background: #d3d3d3;
+  outline: none;
+  opacity: 0.7;
+  -webkit-transition: .2s;
+  transition: opacity .2s;
+}
+
+.slider:hover {
+  opacity: 1;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #800000;
+  cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #800000;
+  cursor: pointer;
+}
+
+input[type="file"] {
+    display: none;
+}
+
+.red-button {
+  width: 140px;
+  background-color: #cc0000;
+  color: white;
+  text-align: center;
+  display: inline-block;
+  font-size: 16px;
+  padding: 14px 0px;
+  margin: 0px 4px 16px;
+  border-radius: 8px;
+  box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+  cursor: pointer;
+  border: 2px solid #800000;
+}
+.red-button:hover {
+	box-shadow: none;
+}
+
+th, td {
+  padding: 10px 4px;
+  text-align:left;
+}
+
+body{
+  background:#f2f2f2;
+  font-family:Arial, Helvetica, sans-serif;
+}
+
+</style>	
+<head>
+</head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<body>
+	<div style="max-width: 100%; margin: 8px; text-align:center;">
+		<h1>Smart E-Paper Frame</h1>
+		
+		<label class="red-button">
+			<input type="file"  id="inputFile"/>Load Image
+		</label>
+		<button class="red-button" onclick="dither()">Dither</button>
+		
+		<table style="width:100%">
+		  <tr>
+			<td style="width:110px">Contrast: <span id="contrastLevel"></td>
+			<td>
+				<div class="slidecontainer">
+					<input type="range" min="-100" max="100" value="0" class="slider" id="rangeContrast">
+				</div>
+			</td>
+		  </tr>
+		  <tr>
+			<td>Brightness: <span id=""></td>
+			<td>
+				<div class="slidecontainer">
+					<input type="range" min="-100" max="100" value="0" class="slider" id="">
+				</div>
+			</td>
+		  </tr>
+		  <tr>
+			<td>Dithering: <span id="ditherLevel"></span></td>
+			<td>
+				<div class="slidecontainer">
+					<input type="range" min="1" max="80" value="16" class="slider" id="rangeDither">
+				</div>
+			</td>
+		  </tr>
+		</table>
+		</br>
+
+		
+		
+		<div  style="width: 100%; display: none;" >
+			<canvas style="width: 100%;" width="640" height="384" id="originalCanvas"/>
+		</div>
+		<div style="width: 100%; border: 3px solid black; border-radius: 5px; background:white;" >
+			<canvas style="width: 100%;" width="640" height="384"  id="editedCanvas"/>
+		</div>
+		
+		<button onclick="uploadImage()" class="red-button" style="width: 100%; margin: 16px 2px 5px;">Upload to Frame</button>
+	</div>
+
+	<script>
+	
+	
+	
+	
+	function rbg2bit(r, b, g){
+		switch(r) {
+		  case 0:	/*black*/
+			return 0;
+		case 255:	/*white*/
+			return 1;
+		case 128:	/*red*/
+			return 3;
+			}
+	}
+	var PALETTE = [[0  , 0  , 0  ], [255, 255, 255], [128, 0  , 0  ]];
+	function uploadImage(){
+		console.log("uploadImage");
+		
+		/*bytesArray = new Uint8Array(pixDataArray);
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', '/post',true);
+		xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+		xhr.send(bytesArray);*/
+		
+		websocket = new WebSocket("ws://" + location.hostname +"/test");
+		websocket.onopen = function(evt) { onOpen(evt) };
+		websocket.onclose = function(evt) { onClose(evt) };
+		websocket.onmessage = function(evt) { onMessage(evt) };
+		websocket.onerror = function(evt) { onError(evt) };
+	}
+	
+	
+	function initWebSocket(){
+		
+	}
+
+	function onOpen(evt){
+		console.log("CONNECTED");
+		websocket.send("Can I send data?");
+	}
+
+	function onClose(evt){
+		console.log("DISCONNECTED");
+	}
+
+	function onMessage(evt){
+		console.log("RESPONSE:");	
+		console.log(evt.data);
+		
+		if(evt.data == "OK"){
+			sendImage();
+		}
+		else if(evt.data == "BUSY"){
+			alert("The frame is busy - Can't load new image");
+			websocket.close();
+		}
+		else{
+			websocket.close();
+		}	
+	}
+	function sendImage(){
+		var ctx = document.getElementById('editedCanvas').getContext('2d');
+		var imgData = ctx.getImageData(0,0,640,384);
+		var d = imgData.data;
+		var pixDataArray = new Array(640*384/4), j=0;
+		
+		for(var i=0; i<d.length;){   /*r,g,b,a*/
+			pix0 = rbg2bit(d[i],d[i+1],d[i+2]);
+			i+=4;
+			pix1 = rbg2bit(d[i],d[i+1],d[i+2]);
+			i+=4;
+			pix2 = rbg2bit(d[i],d[i+1],d[i+2]);
+			i+=4;
+			pix3 = rbg2bit(d[i],d[i+1],d[i+2]);
+			i+=4;
+			pixByte = (pix0<<6)|(pix1<<4)|(pix2<<2)|(pix3<<0);
+			if(j>=pixDataArray.length)break;
+			pixDataArray[j++] = pixByte;	
+		}
+		bytesArray = new Uint8Array(pixDataArray);
+		websocket.send( bytesArray.buffer );
+		console.log("SENDED");
+		websocket.close();
+	}
+	
+	function onError(evt){
+		console.log("ERROR:");
+		console.log(evt.data);//undifened
+	}
+
+  
+  
+  
+  
+	
+	
+	var ditherLevel = 16;
+	var sliderDither = document.getElementById("rangeDither");
+	var outputDither = document.getElementById("ditherLevel");
+	outputDither.innerHTML = sliderDither.value;
+	sliderDither.oninput = function() {
+	  outputDither.innerHTML = this.value;
+	  ditherLevel = this.value;
+	};
+	
+	var sliderContrast = document.getElementById("rangeContrast");
+	var outputContrast = document.getElementById("contrastLevel");
+	outputContrast.innerHTML = sliderContrast.value;
+	sliderContrast.oninput = function() {
+	
+		outputContrast.innerHTML = this.value;
+		var ctx = document.getElementById('originalCanvas').getContext('2d');
+		var imgData = ctx.getImageData(0,0,640,384);
+		
+		imgData = contrastImage(imgData, this.value);
+		
+		ctx = document.getElementById('editedCanvas').getContext('2d');
+		ctx.putImageData(imgData, 0, 0);
+	};
+	
+	function contrastImage(imgData, contrast){  /*input range [-100..100]*/
+		var d = imgData.data;
+		contrast = (contrast/100) + 1;  /*convert to decimal & shift range: [0..2]*/
+		var intercept = 128 * (1 - contrast);
+		for(var i=0;i<d.length;i+=4){   /*r,g,b,a*/
+			d[i] = d[i]*contrast + intercept;
+			d[i+1] = d[i+1]*contrast + intercept;
+			d[i+2] = d[i+2]*contrast + intercept;
+		}
+		return imgData;
+	}
+	
+	var input = document.getElementById('inputFile');
+	input.addEventListener('change', handleFiles);
+
+	/*load the file to the two canvases*/
+	function handleFiles(e) {
+		var ctxOrigin = document.getElementById('originalCanvas').getContext('2d');
+		var ctxEdited = document.getElementById('editedCanvas').getContext('2d');
+		var img = new Image;
+		img.src = URL.createObjectURL(e.target.files[0]);
+		img.onload = function() {
+			ctxOrigin.drawImage(img, 0, 0, img.width,    img.height,    /*source rectangle*/
+			   0, 0, 640, 384); /*destination rectangle*/
+			ctxEdited.drawImage(img, 0, 0, img.width,    img.height,     /*source rectangle*/
+			   0, 0, 640, 384); /*destination rectangle*/
+		}
+	}
+
+	var PALETTE = [[0  , 0  , 0  ], [255, 255, 255], [128, 0  , 0  ]];
+					 
+	function dist_to_pixel(r, g, b, color){
+		var d1 = Math.abs(r-color[0]);
+		var d2 = Math.abs(g-color[1]);
+		var d3 = Math.abs(b-color[2]);
+		return (d1 + d2 + d3);
+	}
+	
+	function find_closest_palette_color(r, g, b){
+		var min_dist = 1000;
+		var closest_color = [0,255,0];
+		var color;
+		for(color of PALETTE){
+			dist = dist_to_pixel(r, g, b,color);
+			if(dist < min_dist){
+				min_dist = dist;
+				closest_color = color;
+			}
+		}
+		
+		return closest_color;
+	}
+	
+	function addToPixel(pixels, pos, quant_error, fraction){
+		if( pos < pixels.length ){
+			pixels[pos+0] += quant_error[0] * fraction ;
+			if(pixels[pos+0] < 0)   pixels[pos+0] = 0;
+			if(pixels[pos+0] > 255) pixels[pos+0] = 255;
+			
+			pixels[pos+1] += quant_error[1] * fraction ;
+			if(pixels[pos+1] < 0)   pixels[pos+1] = 0;
+			if(pixels[pos+1] > 255) pixels[pos+1] = 255;
+			
+			pixels[pos+2] += quant_error[2] * fraction ;
+			if(pixels[pos+2] < 0)   pixels[pos+2] = 0;
+			if(pixels[pos+2] > 255) pixels[pos+2] = 255;
+		}
+		
+	}
+
+	function dither(){
+		var R = 0, G = 1, B = 2, A=3;
+		var oldR, oldG, oldB, newRGB, quant_error, pos;
+		var height=384, width=640;
+		
+		var ctx = document.getElementById('editedCanvas').getContext('2d');
+		var imgData = ctx.getImageData(0,0,width,height);
+		var pixels = imgData.data;
+		
+		for(var y =0; y<height*4; y++){
+			for (var x=0;x<width*4;x+=4){
+				pos = x + y*width;
+				oldR = pixels[pos+R];	/*save original red*/
+				oldG = pixels[pos+G];
+				oldB = pixels[pos+B];
+				newRGB = find_closest_palette_color(oldR, oldG, oldB);
+				pixels[pos+R] = newRGB[R];	/*update red*/
+				pixels[pos+G] = newRGB[G];
+				pixels[pos+B] = newRGB[B];
+				pixels[pos+A] = 255;
+				
+				quant_error = [ (oldR-newRGB[R]), (oldG-newRGB[G]), (oldB-newRGB[B]) ];
+
+				addToPixel(pixels, x+4 +  y *  width, quant_error, 7.0 / ditherLevel);
+				addToPixel(pixels, x-4 + (y+4)*width, quant_error, 3.0 / ditherLevel);
+				addToPixel(pixels, x   + (y+4)*width, quant_error, 5.0 / ditherLevel);
+				addToPixel(pixels, x+4 + (y+4)*width, quant_error, 1.0 / ditherLevel);
+				
+			}
+		}
+		ctx = document.getElementById('editedCanvas').getContext('2d');
+		ctx.putImageData(imgData, 0, 0);
+	}
+	
+	</script>
+</body>
+</html>
