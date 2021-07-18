@@ -3,9 +3,6 @@
 #include "ESPAsyncWebServer.h"
 #include "credentials.h"
 #include "display.h"
-
-const char* ssid = "***REMOVED***";
-const char* password =  "***REMOVED***";
  
 AsyncWebServer server(80);
 AsyncWebSocket ws("/test");
